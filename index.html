@@ -1,0 +1,1167 @@
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>HAPPNEWYEAR</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+        /* 首屏文字样式 */
+        #first-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            text-align: center;
+            opacity: 1;
+            transition: opacity 1s ease;
+            z-index: 9998; 
+            width: 100%;
+            padding: 0 20px;
+            pointer-events: none; 
+        }
+        #first-screen span {
+            color: #ffffff; 
+        }
+    </style>
+</head>
+
+<body>
+    <div id="first-screen">
+        <span>专属于11☁☁的跨年祝福</span>
+    </div>
+
+    <canvas id="canvas" style="position:absolute;width:100%;height:100%;z-index:8887"></canvas>
+    <canvas id="stars" style="position:absolute;width:100%;height:100%;z-index:7777"></canvas>
+    <canvas class="canvas" style="position:absolute;width:100%;height:100%;z-index:9999"></canvas>
+    
+    <audio id="myAudio" loop>
+        <source src="终会与你同行 (1).mp3" type="audio/mpeg">
+    </audio>
+    
+    <audio id="myAudio1">
+        <source src="我想我会 (1).mp3" type="audio/mpeg">
+    </audio>
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script>
+       
+        const music = document.getElementById("myAudio");
+        const music1 = document.getElementById("myAudio1");
+        music.volume = 0.5;
+        music1.volume = 0.5;
+
+      
+        music1.addEventListener('ended', function() {
+            this.pause(); 
+            this.currentTime = 0; 
+        });
+        
+      
+        window.addEventListener('DOMContentLoaded', function() {
+          
+            setTimeout(() => {
+                document.getElementById('first-screen').style.opacity = 0;
+              
+                music1.play().catch(err => {
+                    console.log("自动播放失败，需要用户交互触发:", err);
+                 
+                    const tip = document.createElement('div');
+                    tip.style.cssText = `
+                        position: absolute;
+                        top: 80%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        color: #fff;
+                        font-size: 20px;
+                        z-index: 9999;
+                    `;
+                    tip.innerText = "点击屏幕开始播放音乐";
+                    document.body.appendChild(tip);
+                    document.addEventListener('click', () => {
+                        music1.play();
+                        tip.remove();
+                    }, { once: true });
+                });
+            }, 100);
+
+           
+            document.addEventListener('keydown', function (event) {
+                if (event.key === "Enter") {
+                    if (music.paused) {
+                        music.play();
+                    }
+                }
+            }, { once: true });
+
+            // 3. 初始化烟花、星星、文字效果
+            initFireworks();
+            initStars();
+            initTextAnimation();
+        });
+
+        // ===================== 烟花效果 =====================
+        function initFireworks() {
+            const pi = Math.PI;
+            const ctx = canvas.getContext("2d");
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+            let cx = canvas.width / 2;
+            let cy = canvas.height / 2;
+            let playerZ = -25;
+            let playerX = playerY = playerVX = playerVY = playerVZ = pitch = yaw = pitchV = yawV = 0;
+            const scale = 600;
+            let seedTimer = 0;
+            const seedInterval = 5, seedLife = 100;
+            const gravity = .02;
+            let seeds = new Array();
+            const s = "https://purelove-1315920097.cos.ap-chongqing.myqcloud.com/test/music/";
+            let sparks = new Array();
+            const pow1 = new Audio(s + "fire1.ogg"); pow1.volume = 0.1;
+            const pow2 = new Audio(s + "fire2.ogg"); pow2.volume = 0.1;
+            const pow3 = new Audio(s + "fire3.ogg"); pow3.volume = 0.1;
+            const pow4 = new Audio(s + "fire4.ogg"); pow4.volume = 0.1;
+            let frames = 0;
+
+            function rasterizePoint(x, y, z) {
+                let p, d;
+                x -= playerX;
+                y -= playerY;
+                z -= playerZ;
+                p = Math.atan2(x, z);
+                d = Math.sqrt(x * x + z * z);
+                x = Math.sin(p - yaw) * d;
+                z = Math.cos(p - yaw) * d;
+                p = Math.atan2(y, z);
+                d = Math.sqrt(y * y + z * z);
+                y = Math.sin(p - pitch) * d;
+                z = Math.cos(p - pitch) * d;
+                const rx1 = -1000, ry1 = 1, rx2 = 1000, ry2 = 1, rx3 = 0, ry3 = 0, rx4 = x, ry4 = z;
+                const uc = (ry4 - ry3) * (rx2 - rx1) - (rx4 - rx3) * (ry2 - ry1);
+                if (!uc) return { x: 0, y: 0, d: -1 };
+                const ua = ((rx4 - rx3) * (ry1 - ry3) - (ry4 - ry3) * (rx1 - rx3)) / uc;
+                const ub = ((rx2 - rx1) * (ry1 - ry3) - (ry2 - ry1) * (rx1 - rx3)) / uc;
+                if (!z) z = .000000001;
+                return {
+                    x: cx + (rx1 + ua * (rx2 - rx1)) * scale,
+                    y: cy + y / z * scale,
+                    d: Math.sqrt(x * x + y * y + z * z)
+                };
+            }
+
+            function spawnSeed() {
+                const seed = new Object();
+                seed.x = -50 + Math.random() * 100;
+                seed.y = 25;
+                seed.z = -50 + Math.random() * 100;
+                seed.vx = .1 - Math.random() * .2;
+                seed.vy = -1.5;
+                seed.vz = .1 - Math.random() * .2;
+                seed.born = frames;
+                seeds.push(seed);
+            }
+
+            function splode(x, y, z) {
+                const t = 5 + parseInt(Math.random() * 150);
+                const sparkV = 1 + Math.random() * 2.5;
+                let pow;
+                switch (parseInt(Math.random() * 4)) {
+                    case 0: pow = new Audio(s + "fire1.ogg"); break;
+                    case 1: pow = new Audio(s + "fire2.ogg"); break;
+                    case 2: pow = new Audio(s + "fire3.ogg"); break;
+                    case 3: pow = new Audio(s + "fire4.ogg"); break;
+                }
+                pow.volume = 0.1;
+                pow.play();
+            }
+
+            function doLogic() {
+                if (seedTimer < frames) {
+                    seedTimer = frames + seedInterval * Math.random() * 10;
+                    spawnSeed();
+                }
+                for (let i = 0; i < seeds.length; ++i) {
+                    seeds[i].vy += gravity;
+                    seeds[i].x += seeds[i].vx;
+                    seeds[i].y += seeds[i].vy;
+                    seeds[i].z += seeds[i].vz;
+                    if (frames - seeds[i].born > seedLife) {
+                        splode(seeds[i].x, seeds[i].y, seeds[i].z);
+                        seeds.splice(i, 1);
+                    }
+                }
+                for (let i = 0; i < sparks.length; ++i) {
+                    if (sparks[i].alpha > 0 && sparks[i].radius > 5) {
+                        sparks[i].alpha -= .01;
+                        sparks[i].radius /= 1.02;
+                        sparks[i].vy += gravity;
+                        const point = new Object();
+                        point.x = sparks[i].x;
+                        point.y = sparks[i].y;
+                        point.z = sparks[i].z;
+                        if (sparks[i].trail.length) {
+                            const x = sparks[i].trail[sparks[i].trail.length - 1].x;
+                            const y = sparks[i].trail[sparks[i].trail.length - 1].y;
+                            const z = sparks[i].trail[sparks[i].trail.length - 1].z;
+                            const d = ((point.x - x) * (point.x - x) + (point.y - y) * (point.y - y) + (point.z - z) * (point.z - z));
+                            if (d > 9) {
+                                sparks[i].trail.push(point);
+                            }
+                        } else {
+                            sparks[i].trail.push(point);
+                        }
+                        if (sparks[i].trail.length > 5) sparks[i].trail.splice(0, 1);
+                        sparks[i].x += sparks[i].vx;
+                        sparks[i].y += sparks[i].vy;
+                        sparks[i].z += sparks[i].vz;
+                        sparks[i].vx /= 1.075;
+                        sparks[i].vy /= 1.075;
+                        sparks[i].vz /= 1.075;
+                    } else {
+                        sparks.splice(i, 1);
+                    }
+                }
+                const p = Math.atan2(playerX, playerZ);
+                let d = Math.sqrt(playerX * playerX + playerZ * playerZ);
+                d += Math.sin(frames / 80) / 1.25;
+                const t = Math.sin(frames / 200) / 40;
+                playerX = Math.sin(p + t) * d;
+                playerZ = Math.cos(p + t) * d;
+                yaw = pi + p + t;
+            }
+
+            function rgb(col) {
+                const r = parseInt((.5 + Math.sin(col) * .5) * 16);
+                const g = parseInt((.5 + Math.cos(col) * .5) * 16);
+                const b = parseInt((.5 - Math.sin(col) * .5) * 16);
+                return "#" + r.toString(16) + g.toString(16) + b.toString(16);
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, cx * 2, cy * 2);
+                ctx.fillStyle = "#ff8";
+                for (let i = -100; i < 100; i += 3) {
+                    for (let j = -100; j < 100; j += 4) {
+                        const x = i;
+                        const z = j;
+                        const y = 25;
+                        const point = rasterizePoint(x, y, z);
+                        if (point.d != -1) {
+                            const size = 250 / (1 + point.d);
+                            const d = Math.sqrt(x * x + z * z);
+                            const a = 0.75 - Math.pow(d / 100, 6) * 0.75;
+                            if (a > 0) {
+                                ctx.globalAlpha = a;
+                                ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
+                            }
+                        }
+                    }
+                }
+                ctx.globalAlpha = 1;
+                for (let i = 0; i < seeds.length; ++i) {
+                    const point = rasterizePoint(seeds[i].x, seeds[i].y, seeds[i].z);
+                    if (point.d != -1) {
+                        const size = 200 / (1 + point.d);
+                        ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
+                    }
+                }
+                const point1 = new Object();
+                for (let i = 0; i < sparks.length; ++i) {
+                    const point = rasterizePoint(sparks[i].x, sparks[i].y, sparks[i].z);
+                    if (point.d != -1) {
+                        const size = sparks[i].radius * 200 / (1 + point.d);
+                        if (sparks[i].alpha < 0) sparks[i].alpha = 0;
+                        if (sparks[i].trail.length) {
+                            point1.x = point.x;
+                            point1.y = point.y;
+                            for (let j = sparks[i].trail.length - 1; j >= 0; --j) {
+                                const point2 = rasterizePoint(sparks[i].trail[j].x, sparks[i].trail[j].y, sparks[i].trail[j].z);
+                                if (point2.d != -1) {
+                                    ctx.globalAlpha = j / sparks[i].trail.length * sparks[i].alpha / 2;
+                                    ctx.beginPath();
+                                    ctx.moveTo(point1.x, point1.y);
+                                    ctx.lineWidth = 1 + sparks[i].radius * 10 / (sparks[i].trail.length - j) / (1 + point2.d);
+                                    ctx.lineTo(point2.x, point2.y);
+                                    ctx.stroke();
+                                    point1.x = point2.x;
+                                    point1.y = point2.y;
+                                }
+                            }
+                        }
+                        ctx.globalAlpha = sparks[i].alpha;
+                        if (sparks[i].img) {
+                            ctx.drawImage(sparks[i].img, point.x - size / 2, point.y - size / 2, size, size);
+                        }
+                    }
+                }
+            }
+
+            function frame() {
+                if (frames > 100000) {
+                    seedTimer = 0;
+                    frames = 0;
+                }
+                frames++;
+                draw();
+                doLogic();
+                requestAnimationFrame(frame);
+            }
+
+            window.addEventListener("resize", () => {
+                canvas.width = canvas.clientWidth;
+                canvas.height = canvas.clientHeight;
+                cx = canvas.width / 2;
+                cy = canvas.height / 2;
+            });
+
+            frame();
+        }
+
+        // ===================== 动态文字效果 =====================
+        function initTextAnimation() {
+            const S = {
+                init: function () {
+                    S.Drawing.init('.canvas');
+                    document.body.classList.add('body--ready');
+                    // 文字序列
+                    S.UI.simulate('|#countdown 3||2025|我们相识了|62天|1632小时|97920分钟|这一年的故事|很简单|遇见你|我很喜欢|现在|2026|启程|祝|我们新的一年|万事胜意|岁岁无忧|所求皆如愿|所行皆坦途|让过去过去|让未来,来财|新年快乐!');
+                    S.Drawing.loop(function () {
+                        S.Shape.render();
+                    });
+                }
+            };
+
+            S.Drawing = (function () {
+                let canvas, context, renderFn;
+                const requestFrame = window.requestAnimationFrame ||
+                    window.webkitRequestAnimationFrame ||
+                    window.mozRequestAnimationFrame ||
+                    window.oRequestAnimationFrame ||
+                    window.msRequestAnimationFrame ||
+                    function (callback) {
+                        window.setTimeout(callback, 1000 / 60);
+                    };
+
+                return {
+                    init: function (el) {
+                        canvas = document.querySelector(el);
+                        if (!canvas) {
+                            console.error('Canvas element not found: ' + el);
+                            return;
+                        }
+                        context = canvas.getContext('2d');
+                        this.adjustCanvas();
+                        window.addEventListener('resize', this.adjustCanvas.bind(this));
+                    },
+                    loop: function (fn) {
+                        renderFn = !renderFn ? fn : renderFn;
+                        this.clearFrame();
+                        renderFn();
+                        requestFrame.call(window, this.loop.bind(this));
+                    },
+                    adjustCanvas: function () {
+                        canvas.width = window.innerWidth;
+                        canvas.height = window.innerHeight;
+                    },
+                    clearFrame: function () {
+                        context.clearRect(0, 0, canvas.width, canvas.height);
+                    },
+                    getArea: function () {
+                        return { w: canvas.width, h: canvas.height };
+                    },
+                    drawCircle: function (p, c) {
+                        context.fillStyle = c.render();
+                        context.beginPath();
+                        context.arc(p.x, p.y, p.z, 0, 2 * Math.PI, true);
+                        context.closePath();
+                        context.fill();
+                    }
+                }
+            }());
+
+            S.UI = (function () {
+                const canvas = document.querySelector('.canvas');
+                let interval, currentAction;
+                const maxShapeSize = 30;
+                // 需要延长展示时间的文字
+                const extendedTexts = [
+                    '2025', '我们相识了', '62天', '1632小时', '97920分钟',
+                    '这一年的故事', '很简单', '遇见你', '我很喜欢'
+                ];
+
+                function formatTime(date) {
+                    const h = date.getHours();
+                    const m = date.getMinutes();
+                    return h + ':' + (m < 10 ? '0' + m : m);
+                }
+
+                function getValue(value) {
+                    return value && value.split(' ')[1];
+                }
+
+                function getAction(value) {
+                    return value && value[0] === '#' ? value.substring(1).split(' ')[0] : '';
+                }
+
+                function timedAction(fn, delay, max, reverse) {
+                    clearInterval(interval);
+                    currentAction = reverse ? max : 1;
+                    fn(currentAction);
+
+                    if (!max || (!reverse && currentAction < max) || (reverse && currentAction > 0)) {
+                        interval = setInterval(function () {
+                            currentAction = reverse ? currentAction - 1 : currentAction + 1;
+                            fn(currentAction);
+                            if ((!reverse && max && currentAction === max) || (reverse && currentAction === 0)) {
+                                clearInterval(interval);
+                            }
+                        }, delay);
+                    }
+                }
+
+              
+                function performAction(sequence) {
+                    if (!sequence || sequence.length === 0) return;
+
+                    const current = sequence[0]; 
+                    const action = getAction(current);
+                    const value = getValue(current);
+                    const currentText = action ? '' : current;
+
+                    // 计算展示时长
+                    const delay = extendedTexts.includes(currentText) ? 3000 : 2000;
+
+                    // 处理当前文字
+                    switch (action) {
+                        case 'countdown':
+                            const count = parseInt(value) || 3;
+                            timedAction(function (index) {
+                                if (index === 0) {
+                                    // 倒计时结束，移除当前项并继续
+                                    sequence.shift();
+                                    performAction(sequence);
+                                } else {
+                                    S.Shape.switchShape(S.ShapeBuilder.letter(index), true);
+                                }
+                            }, 1000, count, true);
+                            break;
+
+                        case 'rectangle':
+                            const rectSize = (value && value.split('x')) || [maxShapeSize, maxShapeSize / 2];
+                            S.Shape.switchShape(S.ShapeBuilder.rectangle(
+                                Math.min(maxShapeSize, parseInt(rectSize[0])),
+                                Math.min(maxShapeSize, parseInt(rectSize[1]))
+                            ));
+                            // 移除当前项并继续
+                            sequence.shift();
+                            setTimeout(() => performAction(sequence), delay);
+                            break;
+
+                        case 'circle':
+                            const circleSize = Math.min(parseInt(value) || maxShapeSize, maxShapeSize);
+                            S.Shape.switchShape(S.ShapeBuilder.circle(circleSize));
+                            // 移除当前项并继续
+                            sequence.shift();
+                            setTimeout(() => performAction(sequence), delay);
+                            break;
+
+                        case 'time':
+                            const time = formatTime(new Date());
+                            S.Shape.switchShape(S.ShapeBuilder.letter(time));
+                            // 移除当前项并继续
+                            sequence.shift();
+                            setTimeout(() => performAction(sequence), delay);
+                            break;
+
+                        default:
+                            // 渲染文字
+                            S.Shape.switchShape(S.ShapeBuilder.letter(currentText));
+                            
+                            // 音乐切换逻辑（独立处理，不干扰文字）
+                            if (currentText.includes('2025')) {
+                                // 保留原逻辑，但因为myAudio1已经播放，这里改为暂停/继续
+                                music1.play();
+                                music.pause();
+                            }
+                            if (['现在', '2026', '启程', '祝', '新年快乐'].some(word => currentText.includes(word))) {
+                                music1.pause();
+                                music.play();
+                            }
+
+                            // 移除当前项并继续下一个
+                            sequence.shift();
+                            setTimeout(() => performAction(sequence), delay);
+                            break;
+                    }
+                }
+
+                return {
+                    simulate: function (action) {
+                        const sequence = action.split('|').filter(item => item.trim() !== '');
+                        performAction(sequence);
+                    }
+                }
+            }());
+
+            // 点、颜色、粒子相关定义
+            S.Point = function (args) {
+                this.x = args.x;
+                this.y = args.y;
+                this.z = args.z;
+                this.a = args.a;
+                this.h = args.h;
+            };
+
+            S.Color = function (r, g, b, a) {
+                this.r = r;
+                this.g = g;
+                this.b = b;
+                this.a = a;
+            };
+
+            S.Color.prototype.render = function () {
+                return 'rgba(' + this.r + ',' + this.g + ',' + this.b + ',' + this.a + ')';
+            };
+
+            S.Dot = function (x, y) {
+                this.p = new S.Point({ x: x, y: y, z: 5, a: 1, h: 0 });
+                this.e = 0.07;
+                this.s = true;
+                this.c = new S.Color(255, 255, 255, this.p.a);
+                this.t = Object.assign({}, this.p);
+                this.q = [];
+            };
+
+            S.Dot.prototype = {
+                distanceTo: function (n, details) {
+                    const dx = this.p.x - n.x;
+                    const dy = this.p.y - n.y;
+                    const d = Math.sqrt(dx * dx + dy * dy);
+                    return details ? [dx, dy, d] : d;
+                },
+                move: function (p, avoidStatic) {
+                    if (!avoidStatic || (avoidStatic && this.distanceTo(p) > 1)) {
+                        this.q.push(p);
+                    }
+                },
+                _moveTowards: function (n) {
+                    const [dx, dy, d] = this.distanceTo(n, true);
+                    const e = this.e * d;
+
+                    if (this.p.h === -1) {
+                        this.p.x = n.x;
+                        this.p.y = n.y;
+                        return true;
+                    }
+
+                    if (d > 1) {
+                        this.p.x -= ((dx / d) * e);
+                        this.p.y -= ((dy / d) * e);
+                    } else if (this.p.h > 0) {
+                        this.p.h--;
+                    } else {
+                        return true;
+                    }
+                    return false;
+                },
+                _update: function () {
+                    if (this._moveTowards(this.t)) {
+                        const p = this.q.shift();
+                        if (p) {
+                            this.t.x = p.x || this.p.x;
+                            this.t.y = p.y || this.p.y;
+                            this.t.z = p.z || this.p.z;
+                            this.t.a = p.a || this.p.a;
+                            this.p.h = p.h || 0;
+                        } else {
+                            if (this.s) {
+                                this.p.x -= Math.sin(Math.random() * 3.142);
+                                this.p.y -= Math.sin(Math.random() * 3.142);
+                            } else {
+                                this.move(new S.Point({
+                                    x: this.p.x + (Math.random() * 50) - 25,
+                                    y: this.p.y + (Math.random() * 50) - 25,
+                                }));
+                            }
+                        }
+                    }
+                    const dA = this.p.a - this.t.a;
+                    this.p.a = Math.max(0.1, this.p.a - (dA * 0.05));
+                    const dZ = this.p.z - this.t.z;
+                    this.p.z = Math.max(1, this.p.z - (dZ * 0.05));
+                },
+                _draw: function () {
+                    this.c.a = this.p.a;
+                    S.Drawing.drawCircle(this.p, this.c);
+                },
+                render: function () {
+                    this._update();
+                    this._draw();
+                }
+            };
+
+            S.ShapeBuilder = (function () {
+                const gap = 13;
+                const shapeCanvas = document.createElement('canvas');
+                const shapeContext = shapeCanvas.getContext('2d');
+                const fontSize = 500;
+                const fontFamily = 'Avenir, Helvetica Neue, Helvetica, Arial, sans-serif';
+
+                function fit() {
+                    shapeCanvas.width = Math.floor(window.innerWidth / gap) * gap;
+                    shapeCanvas.height = Math.floor(window.innerHeight / gap) * gap;
+                    shapeContext.fillStyle = 'red';
+                    shapeContext.textBaseline = 'middle';
+                    shapeContext.textAlign = 'center';
+                }
+
+                function processCanvas() {
+                    const pixels = shapeContext.getImageData(0, 0, shapeCanvas.width, shapeCanvas.height).data;
+                    const dots = [];
+                    let x = 0, y = 0, fx = shapeCanvas.width, fy = shapeCanvas.height, w = 0, h = 0;
+
+                    for (let p = 0; p < pixels.length; p += (4 * gap)) {
+                        if (pixels[p + 3] > 0) {
+                            dots.push(new S.Point({ x: x, y: y }));
+                            w = x > w ? x : w;
+                            h = y > h ? y : h;
+                            fx = x < fx ? x : fx;
+                            fy = y < fy ? y : fy;
+                        }
+                        x += gap;
+                        if (x >= shapeCanvas.width) {
+                            x = 0;
+                            y += gap;
+                            p += gap * 4 * shapeCanvas.width;
+                        }
+                    }
+                    return { dots: dots, w: w + fx, h: h + fy };
+                }
+
+                function setFontSize(s) {
+                    shapeContext.font = 'bold ' + s + 'px ' + fontFamily;
+                }
+
+                fit();
+                window.addEventListener('resize', fit);
+
+                return {
+                    letter: function (l) {
+                        setFontSize(fontSize);
+                        const s = Math.min(fontSize,
+                            (shapeCanvas.width / (shapeContext.measureText(l).width || 1)) * 0.8 * fontSize,
+                            (shapeCanvas.height / fontSize) * (isNaN(l) ? 0.45 : 1) * fontSize);
+                        setFontSize(s);
+                        shapeContext.clearRect(0, 0, shapeCanvas.width, shapeCanvas.height);
+                        shapeContext.fillText(l, shapeCanvas.width / 2, shapeCanvas.height / 2);
+                        return processCanvas();
+                    },
+                    circle: function (d) {
+                        const r = Math.max(0, d) / 2;
+                        shapeContext.clearRect(0, 0, shapeCanvas.width, shapeCanvas.height);
+                        shapeContext.beginPath();
+                        shapeContext.arc(r * gap, r * gap, r * gap, 0, 2 * Math.PI, false);
+                        shapeContext.fill();
+                        shapeContext.closePath();
+                        return processCanvas();
+                    },
+                    rectangle: function (w, h) {
+                        const dots = [];
+                        const width = gap * w;
+                        const height = gap * h;
+                        for (let y = 0; y < height; y += gap) {
+                            for (let x = 0; x < width; x += gap) {
+                                dots.push(new S.Point({ x: x, y: y }));
+                            }
+                        }
+                        return { dots: dots, w: width, h: height };
+                    }
+                };
+            }());
+
+            S.Shape = (function () {
+                let dots = [], width = 0, height = 0, cx = 0, cy = 0;
+
+                function compensate() {
+                    const a = S.Drawing.getArea();
+                    cx = a.w / 2 - width / 2;
+                    cy = a.h / 2 - height / 2;
+                }
+
+                return {
+                    switchShape: function (n, fast) {
+                        width = n.w;
+                        height = n.h;
+                        compensate();
+
+                        // 补充足够的粒子
+                        if (n.dots.length > dots.length) {
+                            const a = S.Drawing.getArea();
+                            for (let d = dots.length; d < n.dots.length; d++) {
+                                dots.push(new S.Dot(a.w / 2, a.h / 2));
+                            }
+                        }
+
+                        // 分配粒子位置
+                        let d = 0;
+                        const remainingDots = [...n.dots];
+                        while (remainingDots.length > 0) {
+                            const i = Math.floor(Math.random() * remainingDots.length);
+                            dots[d].e = fast ? 0.25 : (dots[d].s ? 0.14 : 0.11);
+
+                            if (dots[d].s) {
+                                dots[d].move(new S.Point({
+                                    z: Math.random() * 20 + 10,
+                                    a: Math.random(),
+                                    h: 18
+                                }));
+                            } else {
+                                dots[d].move(new S.Point({
+                                    z: Math.random() * 5 + 5,
+                                    h: fast ? 18 : 30
+                                }));
+                            }
+
+                            dots[d].s = true;
+                            dots[d].move(new S.Point({
+                                x: remainingDots[i].x + cx,
+                                y: remainingDots[i].y + cy,
+                                a: 1,
+                                z: 5,
+                                h: 0
+                            }));
+
+                            remainingDots.splice(i, 1);
+                            d++;
+                        }
+
+                        // 处理多余的粒子
+                        const a = S.Drawing.getArea();
+                        for (let i = d; i < dots.length; i++) {
+                            if (dots[i].s) {
+                                dots[i].move(new S.Point({
+                                    z: Math.random() * 20 + 10,
+                                    a: Math.random(),
+                                    h: 20
+                                }));
+                                dots[i].s = false;
+                                dots[i].e = 0.04;
+                                dots[i].move(new S.Point({
+                                    x: Math.random() * a.w,
+                                    y: Math.random() * a.h,
+                                    a: 0.3,
+                                    z: Math.random() * 4,
+                                    h: 0
+                                }));
+                            }
+                        }
+                    },
+                    render: function () {
+                        for (let d = 0; d < dots.length; d++) {
+                            dots[d].render();
+                        }
+                    }
+                };
+            }());
+
+            S.init();
+        }
+
+        // ===================== 星星和流星效果 =====================
+        function initStars() {
+            let context;
+            const arr = []; // 星星
+            const starCount = 800;
+            const rains = []; // 流星
+            const rainCount = 40;
+            let windowWidth = window.innerWidth;
+
+            // 初始化画布
+            function initCanvas() {
+                const stars = document.getElementById('stars');
+                stars.width = window.innerWidth;
+                stars.height = window.innerHeight;
+                context = stars.getContext('2d');
+                windowWidth = window.innerWidth;
+            }
+
+            // 星星类
+            class Star {
+                constructor() {
+                    this.x = windowWidth * Math.random();
+                    this.y = 5000 * Math.random();
+                    this.text = '.';
+                    this.color = 'white';
+                }
+
+                getColor() {
+                    this.color = Math.random() < 0.5 ? '#333' : 'white';
+                }
+
+                init() {
+                    this.getColor();
+                }
+
+                draw() {
+                    context.fillStyle = this.color;
+                    context.fillText(this.text, this.x, this.y);
+                }
+            }
+
+            // 流星类
+            class MeteorRain {
+                constructor() {
+                    this.x = -1;
+                    this.y = -1;
+                    this.length = -1;
+                    this.angle = 30;
+                    this.width = -1;
+                    this.height = -1;
+                    this.speed = 1;
+                    this.offset_x = -1;
+                    this.offset_y = -1;
+                    this.alpha = 1;
+                    this.color1 = '';
+                    this.color2 = '';
+                }
+
+                init() {
+                    this.getPos();
+                    this.alpha = 1;
+                    this.getRandomColor();
+                    this.length = Math.ceil(Math.random() * 80 + 150);
+                    this.angle = 30;
+                    this.speed = Math.ceil(Math.random() + 0.5);
+                    const cos = Math.cos((this.angle * 3.14) / 180);
+                    const sin = Math.sin((this.angle * 3.14) / 180);
+                    this.width = this.length * cos;
+                    this.height = this.length * sin;
+                    this.offset_x = this.speed * cos;
+                    this.offset_y = this.speed * sin;
+                }
+
+                getRandomColor() {
+                    const a = Math.ceil(255 - 240 * Math.random());
+                    this.color1 = `rgba(${a},${a},${a},1)`;
+                    this.color2 = 'black';
+                }
+
+                countPos() {
+                    this.x = this.x - this.offset_x;
+                    this.y = this.y + this.offset_y;
+                }
+
+                getPos() {
+                    this.x = Math.random() * window.innerWidth;
+                    this.y = Math.random() * window.innerHeight;
+                }
+
+                draw() {
+                    context.save();
+                    context.beginPath();
+                    context.lineWidth = 1;
+                    context.globalAlpha = this.alpha;
+                    const line = context.createLinearGradient(
+                        this.x, this.y,
+                        this.x + this.width, this.y - this.height
+                    );
+                    line.addColorStop(0, 'white');
+                    line.addColorStop(0.3, this.color1);
+                    line.addColorStop(0.6, this.color2);
+                    context.strokeStyle = line;
+                    context.moveTo(this.x, this.y);
+                    context.lineTo(this.x + this.width, this.y - this.height);
+                    context.closePath();
+                    context.stroke();
+                    context.restore();
+                }
+
+                move() {
+                    const x = this.x + this.width - this.offset_x;
+                    const y = this.y - this.height;
+                    context.clearRect(x - 3, y - 3, this.offset_x + 5, this.offset_y + 5);
+                    this.countPos();
+                    this.alpha -= 0.002;
+                    this.draw();
+                }
+            }
+
+            // 初始化星星
+            function initStars() {
+                for (let i = 0; i < starCount; i++) {
+                    const star = new Star();
+                    star.init();
+                    star.draw();
+                    arr.push(star);
+                }
+            }
+
+            // 初始化流星
+            function initRains() {
+                for (let i = 0; i < rainCount; i++) {
+                    const rain = new MeteorRain();
+                    rain.init();
+                    rain.draw();
+                    rains.push(rain);
+                }
+            }
+
+            // 星星闪烁
+            function playStars() {
+                for (let n = 0; n < starCount; n++) {
+                    arr[n].getColor();
+                    arr[n].draw();
+                }
+                requestAnimationFrame(playStars);
+            }
+
+            // 流星动画
+            function playRains() {
+                for (let n = 0; n < rainCount; n++) {
+                    const rain = rains[n];
+                    rain.move();
+                    if (rain.y > window.innerHeight) {
+                        context.clearRect(rain.x, rain.y - rain.height, rain.width, rain.height);
+                        rains[n] = new MeteorRain();
+                        rains[n].init();
+                    }
+                }
+                requestAnimationFrame(playRains);
+            }
+
+            // 初始化并启动动画
+            initCanvas();
+            initStars();
+            initRains();
+            playStars();
+            playRains();
+
+            // 窗口大小变化时重新初始化
+            window.addEventListener('resize', initCanvas);
+        }
+
+        // ===================== 鼠标点击烟花效果 =====================
+        (function () {
+            const SCREEN_WIDTH = window.innerWidth;
+            const SCREEN_HEIGHT = window.innerHeight;
+            let mousePos = { x: 400, y: 300 };
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const particles = [];
+            const rockets = [];
+            const MAX_PARTICLES = 400;
+
+            // 添加画布到页面
+            document.body.appendChild(canvas);
+            canvas.width = SCREEN_WIDTH;
+            canvas.height = SCREEN_HEIGHT;
+            canvas.style.position = 'absolute';
+            canvas.style.zIndex = '8888';
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+
+            // 鼠标位置更新
+            document.addEventListener('mousemove', function (e) {
+                mousePos = { x: e.clientX, y: e.clientY };
+            });
+
+            // 鼠标点击发射更多烟花
+            document.addEventListener('mousedown', function (e) {
+                for (let i = 0; i < 5; i++) {
+                    launchFrom(Math.random() * SCREEN_WIDTH * 2 / 3 + SCREEN_WIDTH / 6);
+                }
+            });
+
+            // 定时发射烟花
+            setInterval(launch, 800);
+
+            // 发射烟花
+            function launch() {
+                launchFrom(mousePos.x);
+            }
+
+            function launchFrom(x) {
+                if (rockets.length < 10) {
+                    const rocket = new Rocket(x);
+                    rocket.explosionColor = Math.floor(Math.random() * 360 / 10) * 10;
+                    rocket.vel.y = Math.random() * -3 - 4;
+                    rocket.vel.x = Math.random() * 6 - 3;
+                    rocket.size = 8;
+                    rocket.shrink = 0.999;
+                    rocket.gravity = 0.01;
+                    rockets.push(rocket);
+                }
+            }
+
+            // 主循环
+            function loop() {
+                // 更新画布大小
+                if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                }
+
+                // 半透明背景，实现拖影效果
+                context.fillStyle = "rgba(0, 0, 0, 0.05)";
+                context.fillRect(0, 0, canvas.width, canvas.height);
+
+                // 更新火箭
+                const existingRockets = [];
+                for (let i = 0; i < rockets.length; i++) {
+                    rockets[i].update();
+                    rockets[i].render(context);
+
+                    const distance = Math.sqrt(
+                        Math.pow(mousePos.x - rockets[i].pos.x, 2) +
+                        Math.pow(mousePos.y - rockets[i].pos.y, 2)
+                    );
+                    const randomChance = rockets[i].pos.y < (canvas.height * 2 / 3) ? (Math.random() * 100 <= 1) : false;
+
+                    // 爆炸条件
+                    if (rockets[i].pos.y < canvas.height / 5 || rockets[i].vel.y >= 0 || distance < 50 || randomChance) {
+                        rockets[i].explode();
+                    } else {
+                        existingRockets.push(rockets[i]);
+                    }
+                }
+                rockets.length = 0;
+                rockets.push(...existingRockets);
+
+                // 更新粒子
+                const existingParticles = [];
+                for (let i = 0; i < particles.length; i++) {
+                    particles[i].update();
+                    if (particles[i].exists()) {
+                        particles[i].render(context);
+                        existingParticles.push(particles[i]);
+                    }
+                }
+                particles.length = 0;
+                particles.push(...existingParticles);
+
+                // 限制粒子数量
+                while (particles.length > MAX_PARTICLES) {
+                    particles.shift();
+                }
+
+                requestAnimationFrame(loop);
+            }
+
+            // 粒子类
+            class Particle {
+                constructor(pos) {
+                    this.pos = { x: pos?.x || 0, y: pos?.y || 0 };
+                    this.vel = { x: 0, y: 0 };
+                    this.shrink = .97;
+                    this.size = 2;
+                    this.resistance = 1;
+                    this.gravity = 0;
+                    this.flick = false;
+                    this.alpha = 1;
+                    this.fade = 0;
+                    this.color = 0;
+                }
+
+                update() {
+                    this.vel.x *= this.resistance;
+                    this.vel.y *= this.resistance;
+                    this.vel.y += this.gravity;
+                    this.pos.x += this.vel.x;
+                    this.pos.y += this.vel.y;
+                    this.size *= this.shrink;
+                    this.alpha -= this.fade;
+                }
+
+                render(c) {
+                    if (!this.exists()) return;
+                    c.save();
+                    c.globalCompositeOperation = 'lighter';
+                    const r = this.size / 2;
+                    const gradient = c.createRadialGradient(
+                        this.pos.x, this.pos.y, 0.1,
+                        this.pos.x, this.pos.y, r
+                    );
+                    gradient.addColorStop(0.1, `rgba(255,255,255,${this.alpha})`);
+                    gradient.addColorStop(0.8, `hsla(${this.color}, 100%, 50%, ${this.alpha})`);
+                    gradient.addColorStop(1, `hsla(${this.color}, 100%, 50%, 0.1)`);
+                    c.fillStyle = gradient;
+                    c.beginPath();
+                    c.arc(
+                        this.pos.x, this.pos.y,
+                        this.flick ? Math.random() * this.size : this.size,
+                        0, Math.PI * 2, true
+                    );
+                    c.closePath();
+                    c.fill();
+                    c.restore();
+                }
+
+                exists() {
+                    return this.alpha >= 0.1 && this.size >= 1;
+                }
+            }
+
+            // 火箭类（继承粒子）
+            class Rocket extends Particle {
+                constructor(x) {
+                    super({ x: x, y: canvas.height });
+                    this.explosionColor = 0;
+                }
+
+                explode() {
+                    const count = Math.random() * 10 + 80;
+                    for (let i = 0; i < count; i++) {
+                        const particle = new Particle(this.pos);
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = Math.cos(Math.random() * Math.PI / 2) * 15;
+                        particle.vel.x = Math.cos(angle) * speed;
+                        particle.vel.y = Math.sin(angle) * speed;
+                        particle.size = 10;
+                        particle.gravity = 0.2;
+                        particle.resistance = 0.92;
+                        particle.shrink = Math.random() * 0.05 + 0.93;
+                        particle.flick = true;
+                        particle.color = this.explosionColor;
+                        particles.push(particle);
+                    }
+                }
+
+                render(c) {
+                    if (!this.exists()) return;
+                    c.save();
+                    c.globalCompositeOperation = 'lighter';
+                    const r = this.size / 2;
+                    const gradient = c.createRadialGradient(
+                        this.pos.x, this.pos.y, 0.1,
+                        this.pos.x, this.pos.y, r
+                    );
+                    gradient.addColorStop(0.1, `rgba(255, 255, 255, ${this.alpha})`);
+                    gradient.addColorStop(1, `rgba(0, 0, 0, ${this.alpha})`);
+                    c.fillStyle = gradient;
+                    c.beginPath();
+                    c.arc(
+                        this.pos.x, this.pos.y,
+                        this.flick ? Math.random() * this.size / 2 + this.size / 2 : this.size,
+                        0, Math.PI * 2, true
+                    );
+                    c.closePath();
+                    c.fill();
+                    c.restore();
+                }
+            }
+
+            // 启动主循环
+            loop();
+        })();
+    </script>
+</body>
+
+</html>
